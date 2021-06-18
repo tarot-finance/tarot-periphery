@@ -11,7 +11,6 @@ import "./interfaces/IWETH.sol";
 import "./interfaces/IUniswapV2Pair.sol";
 import "./libraries/SafeMath.sol";
 import "./libraries/TransferHelper.sol";
-import "./libraries/UniswapV2Library.sol";
 
 contract Router01 is IRouter01, IImpermaxCallee {
 	using SafeMath for uint;
@@ -429,16 +428,23 @@ contract Router01 is IRouter01, IImpermaxCallee {
 		uint amountBMin
 	) public virtual view returns (uint amountA, uint amountB) {
 		(uint reserveA, uint reserveB,) = IUniswapV2Pair(uniswapV2Pair).getReserves();
-		uint amountBOptimal = UniswapV2Library.quote(amountADesired, reserveA, reserveB);
+		uint amountBOptimal = _quote(amountADesired, reserveA, reserveB);
 		if (amountBOptimal <= amountBDesired) {
 			require(amountBOptimal >= amountBMin, "ImpermaxRouter: INSUFFICIENT_B_AMOUNT");
 			(amountA, amountB) = (amountADesired, amountBOptimal);
 		} else {
-			uint amountAOptimal = UniswapV2Library.quote(amountBDesired, reserveB, reserveA);
+			uint amountAOptimal = _quote(amountBDesired, reserveB, reserveA);
 			assert(amountAOptimal <= amountADesired);
 			require(amountAOptimal >= amountAMin, "ImpermaxRouter: INSUFFICIENT_A_AMOUNT");
 			(amountA, amountB) = (amountAOptimal, amountBDesired);
 		}
+	}
+
+	// given some amount of an asset and pair reserves, returns an equivalent amount of the other asset
+	function _quote(uint amountA, uint reserveA, uint reserveB) internal pure returns (uint amountB) {
+			require(amountA > 0, 'ImpermaxRouter: INSUFFICIENT_AMOUNT');
+			require(reserveA > 0 && reserveB > 0, 'ImpermaxRouter: INSUFFICIENT_LIQUIDITY');
+			amountB = amountA.mul(reserveB) / reserveA;
 	}
 	
 	function getBorrowable(address uniswapV2Pair, uint8 index) public virtual override view returns (address borrowable) {
