@@ -1,6 +1,6 @@
-pragma solidity ^0.5.0;
+pragma solidity >=0.5.0;
 
-interface IUniswapV2Pair {
+interface IERC20 {
     event Approval(address indexed owner, address indexed spender, uint value);
     event Transfer(address indexed from, address indexed to, uint value);
 
@@ -14,10 +14,4 @@ interface IUniswapV2Pair {
     function approve(address spender, uint value) external returns (bool);
     function transfer(address to, uint value) external returns (bool);
     function transferFrom(address from, address to, uint value) external returns (bool);
-	
-    function token0() external view returns (address);
-    function token1() external view returns (address);
-    function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
-
-    function price0CumulativeLast() external view returns (uint);
 }
