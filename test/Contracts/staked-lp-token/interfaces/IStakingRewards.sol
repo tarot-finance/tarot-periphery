@@ -1,4 +1,4 @@
-pragma solidity >=0.5.0;
+pragma solidity ^0.5.0;
 
 interface IStakingRewards {
     function rewardsToken() external view returns (address);
