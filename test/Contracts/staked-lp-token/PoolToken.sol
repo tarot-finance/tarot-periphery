@@ -1,11 +1,11 @@
 pragma solidity =0.5.16;
 
-import "./ImpermaxERC20.sol";
+import "./TarotERC20.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IPoolToken.sol";
 import "./libraries/SafeMath.sol";
 
-contract PoolToken is IPoolToken, ImpermaxERC20 {
+contract PoolToken is IPoolToken, TarotERC20 {
    	uint internal constant initialExchangeRate = 1e18;
 	address public underlying;
 	address public factory;
@@ -20,7 +20,7 @@ contract PoolToken is IPoolToken, ImpermaxERC20 {
 	
 	// called once by the factory
 	function _setFactory() external {
-		require(factory == address(0), "Impermax: FACTORY_ALREADY_SET");
+		require(factory == address(0), "Tarot: FACTORY_ALREADY_SET");
 		factory = msg.sender;
 	}
 	
@@ -50,7 +50,7 @@ contract PoolToken is IPoolToken, ImpermaxERC20 {
 			mintTokens = mintTokens.sub(MINIMUM_LIQUIDITY);
 			_mint(address(0), MINIMUM_LIQUIDITY);
 		}
-		require(mintTokens > 0, "Impermax: MINT_AMOUNT_ZERO");
+		require(mintTokens > 0, "Tarot: MINT_AMOUNT_ZERO");
 		_mint(minter, mintTokens);
 		emit Mint(msg.sender, minter, mintAmount, mintTokens);
 	}
@@ -60,8 +60,8 @@ contract PoolToken is IPoolToken, ImpermaxERC20 {
 		uint redeemTokens = balanceOf[address(this)];
 		redeemAmount = redeemTokens.mul(exchangeRate()).div(1e18);
 
-		require(redeemAmount > 0, "Impermax: REDEEM_AMOUNT_ZERO");
-		require(redeemAmount <= totalBalance, "Impermax: INSUFFICIENT_CASH");
+		require(redeemAmount > 0, "Tarot: REDEEM_AMOUNT_ZERO");
+		require(redeemAmount <= totalBalance, "Tarot: INSUFFICIENT_CASH");
 		_burn(address(this), redeemTokens);
 		_safeTransfer(redeemer, redeemAmount);
 		emit Redeem(msg.sender, redeemer, redeemAmount, redeemTokens);		
@@ -81,13 +81,13 @@ contract PoolToken is IPoolToken, ImpermaxERC20 {
 	bytes4 private constant SELECTOR = bytes4(keccak256(bytes("transfer(address,uint256)")));
 	function _safeTransfer(address to, uint amount) internal {
 		(bool success, bytes memory data) = underlying.call(abi.encodeWithSelector(SELECTOR, to, amount));
-		require(success && (data.length == 0 || abi.decode(data, (bool))), "Impermax: TRANSFER_FAILED");
+		require(success && (data.length == 0 || abi.decode(data, (bool))), "Tarot: TRANSFER_FAILED");
 	}
 	
 	// prevents a contract from calling itself, directly or indirectly.
 	bool internal _notEntered = true;
 	modifier nonReentrant() {
-		require(_notEntered, "Impermax: REENTERED");
+		require(_notEntered, "Tarot: REENTERED");
 		_notEntered = false;
 		_;
 		_notEntered = true;

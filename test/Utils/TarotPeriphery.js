@@ -1,7 +1,7 @@
-const { bnMantissa, BN } = require('./JS');
-const { address, encode, encodePacked } = require('./Ethereum');
-const { hexlify, keccak256, toUtf8Bytes } = require('ethers').utils;
-const { ecsign } = require('ethereumjs-util');
+const { bnMantissa, BN } = require("./JS");
+const { address, encode, encodePacked } = require("./Ethereum");
+const { hexlify, keccak256, toUtf8Bytes } = require("ethers").utils;
+const { ecsign } = require("ethereumjs-util");
 
 //UTILITIES
 
@@ -84,15 +84,15 @@ function deleverage(
 function getDomainSeparator(name, tokenAddress) {
   return keccak256(
     encode(
-      ['bytes32', 'bytes32', 'bytes32', 'uint256', 'address'],
+      ["bytes32", "bytes32", "bytes32", "uint256", "address"],
       [
         keccak256(
           toUtf8Bytes(
-            'EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)'
+            "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
           )
         ),
         keccak256(toUtf8Bytes(name)),
-        keccak256(toUtf8Bytes('1')),
+        keccak256(toUtf8Bytes("1")),
         1,
         tokenAddress,
       ]
@@ -102,12 +102,12 @@ function getDomainSeparator(name, tokenAddress) {
 
 const PERMIT_TYPEHASH = keccak256(
   toUtf8Bytes(
-    'Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)'
+    "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
   )
 );
 const BORROW_PERMIT_TYPEHASH = keccak256(
   toUtf8Bytes(
-    'BorrowPermit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)'
+    "BorrowPermit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
   )
 );
 
@@ -123,14 +123,14 @@ async function getApprovalDigest(
   const TYPEHASH = borrowPermit ? BORROW_PERMIT_TYPEHASH : PERMIT_TYPEHASH;
   return keccak256(
     encodePacked(
-      ['bytes1', 'bytes1', 'bytes32', 'bytes32'],
+      ["bytes1", "bytes1", "bytes32", "bytes32"],
       [
-        '0x19',
-        '0x01',
+        "0x19",
+        "0x01",
         DOMAIN_SEPARATOR,
         keccak256(
           encode(
-            ['bytes32', 'address', 'address', 'uint256', 'uint256', 'uint256'],
+            ["bytes32", "address", "address", "uint256", "uint256", "uint256"],
             [
               TYPEHASH,
               approve.owner,
@@ -160,8 +160,8 @@ async function getPermit(opts) {
     borrowPermit
   );
   const { v, r, s } = ecsign(
-    Buffer.from(digest.slice(2), 'hex'),
-    Buffer.from(private_key, 'hex')
+    Buffer.from(digest.slice(2), "hex"),
+    Buffer.from(private_key, "hex")
   );
   return { v, r: hexlify(r), s: hexlify(s) };
 }
@@ -170,12 +170,12 @@ const permitGenerator = {
   //Note: activatePermit is false by default. If you want to test the permit you need to configure mnemonic with the one of your ganache wallet
   activatePermit: false,
   mnemonic:
-    'artist rigid narrow swallow catch attend pulp victory drift outside prepare tribe',
+    "artist rigid narrow swallow catch attend pulp victory drift outside prepare tribe",
   PKs: [],
   initialize: async () => {
     if (!permitGenerator.activatePermit) return;
-    const { mnemonicToSeed } = require('bip39');
-    const { hdkey } = require('ethereumjs-wallet');
+    const { mnemonicToSeed } = require("bip39");
+    const { hdkey } = require("ethereumjs-wallet");
     const seed = await mnemonicToSeed(permitGenerator.mnemonic);
     const hdk = hdkey.fromMasterSeed(seed);
     for (i = 0; i < 10; i++) {
@@ -196,14 +196,14 @@ const permitGenerator = {
         borrowPermit,
       });
       return encode(
-        ['bool', 'uint8', 'bytes32', 'bytes32'],
+        ["bool", "uint8", "bytes32", "bytes32"],
         [value.eq(MAX_UINT_256), v, r, s]
       );
     } else {
       if (borrowPermit)
         await token.borrowApprove(spender, value, { from: owner });
       else await token.approve(spender, value, { from: owner });
-      return '0x';
+      return "0x";
     }
   },
   permit: async (token, owner, spender, value, deadline) => {

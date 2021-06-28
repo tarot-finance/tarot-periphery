@@ -5,30 +5,30 @@ const {
   expectAlmostEqualMantissa,
   bnMantissa,
   BN,
-} = require('./Utils/JS');
-const { address, increaseTime, encode } = require('./Utils/Ethereum');
+} = require("./Utils/JS");
+const { address, increaseTime, encode } = require("./Utils/Ethereum");
 const {
   getAmounts,
   leverage,
   deleverage,
   permitGenerator,
-} = require('./Utils/ImpermaxPeriphery');
-const { keccak256, toUtf8Bytes } = require('ethers').utils;
+} = require("./Utils/TarotPeriphery");
+const { keccak256, toUtf8Bytes } = require("ethers").utils;
 
 const MAX_UINT_256 = new BN(2).pow(new BN(256)).sub(new BN(1));
 const DEADLINE = MAX_UINT_256;
 
-const MockERC20 = artifacts.require('MockERC20');
-const UniswapV2Factory = artifacts.require('UniswapV2Factory');
-const UniswapV2Pair = artifacts.require('UniswapV2Pair');
-const SimpleUniswapOracle = artifacts.require('SimpleUniswapOracle');
-const Factory = artifacts.require('Factory');
-const BDeployer = artifacts.require('BDeployer');
-const CDeployer = artifacts.require('CDeployer');
-const Collateral = artifacts.require('Collateral');
-const Borrowable = artifacts.require('Borrowable');
-const Router02 = artifacts.require('Router02');
-const WETH9 = artifacts.require('WETH9');
+const MockERC20 = artifacts.require("MockERC20");
+const UniswapV2Factory = artifacts.require("UniswapV2Factory");
+const UniswapV2Pair = artifacts.require("UniswapV2Pair");
+const TarotPriceOracle = artifacts.require("TarotPriceOracle");
+const Factory = artifacts.require("Factory");
+const BDeployer = artifacts.require("BDeployer");
+const CDeployer = artifacts.require("CDeployer");
+const Collateral = artifacts.require("Collateral");
+const Borrowable = artifacts.require("Borrowable");
+const Router02 = artifacts.require("Router02");
+const WETH9 = artifacts.require("WETH9");
 
 const oneMantissa = new BN(10).pow(new BN(18));
 const UNI_LP_AMOUNT = oneMantissa;
@@ -52,15 +52,15 @@ let ETH_IS_A;
 const INITIAL_EXCHANGE_RATE = oneMantissa;
 const MINIMUM_LIQUIDITY = new BN(1000);
 
-contract('Deleverage02', function (accounts) {
+contract("Deleverage02", function (accounts) {
   let root = accounts[0];
   let borrower = accounts[1];
   let lender = accounts[2];
   let liquidator = accounts[3];
 
   let uniswapV2Factory;
-  let simpleUniswapOracle;
-  let impermaxFactory;
+  let tarotPriceOracle;
+  let tarotFactory;
   let WETH;
   let UNI;
   let uniswapV2Pair;
@@ -71,18 +71,18 @@ contract('Deleverage02', function (accounts) {
 
   beforeEach(async () => {
     uniswapV2Factory = await UniswapV2Factory.new(address(0));
-    simpleUniswapOracle = await SimpleUniswapOracle.new();
+    tarotPriceOracle = await TarotPriceOracle.new();
     const bDeployer = await BDeployer.new();
     const cDeployer = await CDeployer.new();
-    impermaxFactory = await Factory.new(
+    tarotFactory = await Factory.new(
       address(0),
       address(0),
       bDeployer.address,
       cDeployer.address,
-      simpleUniswapOracle.address
+      tarotPriceOracle.address
     );
     WETH = await WETH9.new();
-    UNI = await MockERC20.new('Uniswap', 'UNI');
+    UNI = await MockERC20.new("Uniswap", "UNI");
     const uniswapV2PairAddress = await uniswapV2Factory.createPair.call(
       WETH.address,
       UNI.address
@@ -98,20 +98,20 @@ contract('Deleverage02', function (accounts) {
     });
     await uniswapV2Pair.mint(borrower);
     LP_AMOUNT = await uniswapV2Pair.balanceOf(borrower);
-    await simpleUniswapOracle.initialize(uniswapV2PairAddress);
-    collateralAddress = await impermaxFactory.createCollateral.call(
+    await tarotPriceOracle.initialize(uniswapV2PairAddress);
+    collateralAddress = await tarotFactory.createCollateral.call(
       uniswapV2PairAddress
     );
-    borrowable0Address = await impermaxFactory.createBorrowable0.call(
+    borrowable0Address = await tarotFactory.createBorrowable0.call(
       uniswapV2PairAddress
     );
-    borrowable1Address = await impermaxFactory.createBorrowable1.call(
+    borrowable1Address = await tarotFactory.createBorrowable1.call(
       uniswapV2PairAddress
     );
-    await impermaxFactory.createCollateral(uniswapV2PairAddress);
-    await impermaxFactory.createBorrowable0(uniswapV2PairAddress);
-    await impermaxFactory.createBorrowable1(uniswapV2PairAddress);
-    await impermaxFactory.initializeLendingPool(uniswapV2PairAddress);
+    await tarotFactory.createCollateral(uniswapV2PairAddress);
+    await tarotFactory.createBorrowable0(uniswapV2PairAddress);
+    await tarotFactory.createBorrowable1(uniswapV2PairAddress);
+    await tarotFactory.initializeLendingPool(uniswapV2PairAddress);
     collateral = await Collateral.at(collateralAddress);
     const borrowable0 = await Borrowable.at(borrowable0Address);
     const borrowable1 = await Borrowable.at(borrowable1Address);
@@ -119,7 +119,7 @@ contract('Deleverage02', function (accounts) {
     if (ETH_IS_A) [borrowableWETH, borrowableUNI] = [borrowable0, borrowable1];
     else [borrowableWETH, borrowableUNI] = [borrowable1, borrowable0];
     router = await Router02.new(
-      impermaxFactory.address,
+      tarotFactory.address,
       bDeployer.address,
       cDeployer.address,
       WETH.address
@@ -186,15 +186,15 @@ contract('Deleverage02', function (accounts) {
       borrower,
       ETH_LEVERAGE_AMOUNT,
       UNI_LEVERAGE_AMOUNT,
-      '0',
-      '0',
+      "0",
+      "0",
       permitBorrowETH,
       permitBorrowUNI,
       ETH_IS_A
     );
   });
 
-  it('deleverage', async () => {
+  it("deleverage", async () => {
     const LP_DLVRG_TOKENS = DLVRG.mul(LP_TOKENS);
     const ETH_DLVRG_MIN = ETH_DLVRG_AMOUNT.mul(new BN(9999)).div(new BN(10000));
     const ETH_DLVRG_HIGH = ETH_DLVRG_AMOUNT.mul(new BN(10001)).div(
@@ -212,10 +212,10 @@ contract('Deleverage02', function (accounts) {
         LP_DLVRG_TOKENS,
         ETH_DLVRG_MIN,
         UNI_DLVRG_MIN,
-        '0x',
+        "0x",
         ETH_IS_A
       ),
-      'Impermax: TRANSFER_NOT_ALLOWED'
+      "Tarot: TRANSFER_NOT_ALLOWED"
     );
     const permit = await permitGenerator.permit(
       collateral,
@@ -229,13 +229,13 @@ contract('Deleverage02', function (accounts) {
         router,
         uniswapV2Pair,
         borrower,
-        '0',
+        "0",
         ETH_DLVRG_MIN,
         UNI_DLVRG_MIN,
         permit,
         ETH_IS_A
       ),
-      'ImpermaxRouter: REDEEM_ZERO'
+      "TarotRouter: REDEEM_ZERO"
     );
     await expectRevert(
       deleverage(
@@ -249,8 +249,8 @@ contract('Deleverage02', function (accounts) {
         ETH_IS_A
       ),
       ETH_IS_A
-        ? 'ImpermaxRouter: INSUFFICIENT_A_AMOUNT'
-        : 'ImpermaxRouter: INSUFFICIENT_B_AMOUNT'
+        ? "TarotRouter: INSUFFICIENT_A_AMOUNT"
+        : "TarotRouter: INSUFFICIENT_B_AMOUNT"
     );
     await expectRevert(
       deleverage(
@@ -264,8 +264,8 @@ contract('Deleverage02', function (accounts) {
         ETH_IS_A
       ),
       ETH_IS_A
-        ? 'ImpermaxRouter: INSUFFICIENT_B_AMOUNT'
-        : 'ImpermaxRouter: INSUFFICIENT_A_AMOUNT'
+        ? "TarotRouter: INSUFFICIENT_B_AMOUNT"
+        : "TarotRouter: INSUFFICIENT_A_AMOUNT"
     );
 
     const balancePrior = await collateral.balanceOf(borrower);
@@ -299,7 +299,7 @@ contract('Deleverage02', function (accounts) {
     );
   });
 
-  it('deleverage with refund UNI', async () => {
+  it("deleverage with refund UNI", async () => {
     const LP_DLVRG_TOKENS =
       DLVRG_REFUND_NUM.mul(LP_TOKENS).div(DLVRG_REFUND_DEN);
     const permit = await permitGenerator.permit(
@@ -317,8 +317,8 @@ contract('Deleverage02', function (accounts) {
       uniswapV2Pair,
       borrower,
       LP_DLVRG_TOKENS,
-      '0',
-      '0',
+      "0",
+      "0",
       permit,
       ETH_IS_A
     );

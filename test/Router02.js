@@ -5,29 +5,29 @@ const {
   expectAlmostEqualMantissa,
   bnMantissa,
   BN,
-} = require('./Utils/JS');
-const { address, increaseTime, encode } = require('./Utils/Ethereum');
+} = require("./Utils/JS");
+const { address, increaseTime, encode } = require("./Utils/Ethereum");
 const {
   getAmounts,
   leverage,
   permitGenerator,
-} = require('./Utils/ImpermaxPeriphery');
-const { keccak256, toUtf8Bytes } = require('ethers').utils;
+} = require("./Utils/TarotPeriphery");
+const { keccak256, toUtf8Bytes } = require("ethers").utils;
 
 const MAX_UINT_256 = new BN(2).pow(new BN(256)).sub(new BN(1));
 const DEADLINE = MAX_UINT_256;
 
-const MockERC20 = artifacts.require('MockERC20');
-const UniswapV2Factory = artifacts.require('UniswapV2Factory');
-const UniswapV2Pair = artifacts.require('UniswapV2Pair');
-const SimpleUniswapOracle = artifacts.require('SimpleUniswapOracle');
-const Factory = artifacts.require('Factory');
-const BDeployer = artifacts.require('BDeployer');
-const CDeployer = artifacts.require('CDeployer');
-const Collateral = artifacts.require('Collateral');
-const Borrowable = artifacts.require('Borrowable');
-const Router02 = artifacts.require('Router02');
-const WETH9 = artifacts.require('WETH9');
+const MockERC20 = artifacts.require("MockERC20");
+const UniswapV2Factory = artifacts.require("UniswapV2Factory");
+const UniswapV2Pair = artifacts.require("UniswapV2Pair");
+const TarotPriceOracle = artifacts.require("TarotPriceOracle");
+const Factory = artifacts.require("Factory");
+const BDeployer = artifacts.require("BDeployer");
+const CDeployer = artifacts.require("CDeployer");
+const Collateral = artifacts.require("Collateral");
+const Borrowable = artifacts.require("Borrowable");
+const Router02 = artifacts.require("Router02");
+const WETH9 = artifacts.require("WETH9");
 
 const oneMantissa = new BN(10).pow(new BN(18));
 const UNI_LP_AMOUNT = oneMantissa;
@@ -85,15 +85,15 @@ async function checkETHBalance(
   }
 }
 
-contract('Router02', function (accounts) {
+contract("Router02", function (accounts) {
   let root = accounts[0];
   let borrower = accounts[1];
   let lender = accounts[2];
   let liquidator = accounts[3];
 
   let uniswapV2Factory;
-  let simpleUniswapOracle;
-  let impermaxFactory;
+  let tarotPriceOracle;
+  let tarotFactory;
   let WETH;
   let UNI;
   let uniswapV2Pair;
@@ -104,18 +104,18 @@ contract('Router02', function (accounts) {
 
   before(async () => {
     uniswapV2Factory = await UniswapV2Factory.new(address(0));
-    simpleUniswapOracle = await SimpleUniswapOracle.new();
+    tarotPriceOracle = await TarotPriceOracle.new();
     const bDeployer = await BDeployer.new();
     const cDeployer = await CDeployer.new();
-    impermaxFactory = await Factory.new(
+    tarotFactory = await Factory.new(
       address(0),
       address(0),
       bDeployer.address,
       cDeployer.address,
-      simpleUniswapOracle.address
+      tarotPriceOracle.address
     );
     WETH = await WETH9.new();
-    UNI = await MockERC20.new('Uniswap', 'UNI');
+    UNI = await MockERC20.new("Uniswap", "UNI");
     const uniswapV2PairAddress = await uniswapV2Factory.createPair.call(
       WETH.address,
       UNI.address
@@ -131,20 +131,20 @@ contract('Router02', function (accounts) {
     });
     await uniswapV2Pair.mint(borrower);
     LP_AMOUNT = await uniswapV2Pair.balanceOf(borrower);
-    await simpleUniswapOracle.initialize(uniswapV2PairAddress);
-    collateralAddress = await impermaxFactory.createCollateral.call(
+    await tarotPriceOracle.initialize(uniswapV2PairAddress);
+    collateralAddress = await tarotFactory.createCollateral.call(
       uniswapV2PairAddress
     );
-    borrowable0Address = await impermaxFactory.createBorrowable0.call(
+    borrowable0Address = await tarotFactory.createBorrowable0.call(
       uniswapV2PairAddress
     );
-    borrowable1Address = await impermaxFactory.createBorrowable1.call(
+    borrowable1Address = await tarotFactory.createBorrowable1.call(
       uniswapV2PairAddress
     );
-    await impermaxFactory.createCollateral(uniswapV2PairAddress);
-    await impermaxFactory.createBorrowable0(uniswapV2PairAddress);
-    await impermaxFactory.createBorrowable1(uniswapV2PairAddress);
-    await impermaxFactory.initializeLendingPool(uniswapV2PairAddress);
+    await tarotFactory.createCollateral(uniswapV2PairAddress);
+    await tarotFactory.createBorrowable0(uniswapV2PairAddress);
+    await tarotFactory.createBorrowable1(uniswapV2PairAddress);
+    await tarotFactory.initializeLendingPool(uniswapV2PairAddress);
     collateral = await Collateral.at(collateralAddress);
     const borrowable0 = await Borrowable.at(borrowable0Address);
     const borrowable1 = await Borrowable.at(borrowable1Address);
@@ -152,7 +152,7 @@ contract('Router02', function (accounts) {
     if (ETH_IS_A) [borrowableWETH, borrowableUNI] = [borrowable0, borrowable1];
     else [borrowableWETH, borrowableUNI] = [borrowable1, borrowable0];
     router = await Router02.new(
-      impermaxFactory.address,
+      tarotFactory.address,
       bDeployer.address,
       cDeployer.address,
       WETH.address
@@ -161,8 +161,8 @@ contract('Router02', function (accounts) {
     await permitGenerator.initialize();
   });
 
-  it('optimal liquidity', async () => {
-    const t1 = getAmounts('8', '1000', '0', '600', ETH_IS_A);
+  it("optimal liquidity", async () => {
+    const t1 = getAmounts("8", "1000", "0", "600", ETH_IS_A);
     const r1 = await router._optimalLiquidity(
       uniswapV2Pair.address,
       t1.amountADesired,
@@ -172,7 +172,7 @@ contract('Router02', function (accounts) {
     );
     expect(r1.amountA * 1).to.eq(ETH_IS_A ? 8 : 800);
     expect(r1.amountB * 1).to.eq(ETH_IS_A ? 800 : 8);
-    const t2 = getAmounts('10', '700', '6', '0', ETH_IS_A);
+    const t2 = getAmounts("10", "700", "6", "0", ETH_IS_A);
     const r2 = await router._optimalLiquidity(
       uniswapV2Pair.address,
       t2.amountADesired,
@@ -182,7 +182,7 @@ contract('Router02', function (accounts) {
     );
     expect(r2.amountA * 1).to.eq(ETH_IS_A ? 7 : 700);
     expect(r2.amountB * 1).to.eq(ETH_IS_A ? 700 : 7);
-    const t3 = getAmounts('5', '1000', '0', '600', ETH_IS_A);
+    const t3 = getAmounts("5", "1000", "0", "600", ETH_IS_A);
     await expectRevert(
       router._optimalLiquidity(
         uniswapV2Pair.address,
@@ -192,10 +192,10 @@ contract('Router02', function (accounts) {
         t3.amountBMin
       ),
       ETH_IS_A
-        ? 'ImpermaxRouter: INSUFFICIENT_B_AMOUNT'
-        : 'ImpermaxRouter: INSUFFICIENT_A_AMOUNT'
+        ? "TarotRouter: INSUFFICIENT_B_AMOUNT"
+        : "TarotRouter: INSUFFICIENT_A_AMOUNT"
     );
-    const t4 = getAmounts('10', '500', '6', '0', ETH_IS_A);
+    const t4 = getAmounts("10", "500", "6", "0", ETH_IS_A);
     await expectRevert(
       router._optimalLiquidity(
         uniswapV2Pair.address,
@@ -205,18 +205,18 @@ contract('Router02', function (accounts) {
         t4.amountBMin
       ),
       ETH_IS_A
-        ? 'ImpermaxRouter: INSUFFICIENT_A_AMOUNT'
-        : 'ImpermaxRouter: INSUFFICIENT_B_AMOUNT'
+        ? "TarotRouter: INSUFFICIENT_A_AMOUNT"
+        : "TarotRouter: INSUFFICIENT_B_AMOUNT"
     );
   });
 
-  it('mint', async () => {
+  it("mint", async () => {
     //Mint UNI
     await expectRevert(
-      router.mint(borrowableUNI.address, UNI_LEND_AMOUNT, lender, '0', {
+      router.mint(borrowableUNI.address, UNI_LEND_AMOUNT, lender, "0", {
         from: lender,
       }),
-      'ImpermaxRouter: EXPIRED'
+      "TarotRouter: EXPIRED"
     );
     await expectRevert.unspecified(
       router.mint(borrowableUNI.address, UNI_LEND_AMOUNT, lender, DEADLINE, {
@@ -241,14 +241,14 @@ contract('Router02', function (accounts) {
         value: ETH_LEND_AMOUNT,
         from: lender,
       }),
-      'ImpermaxRouter: NOT_WETH'
+      "TarotRouter: NOT_WETH"
     );
     await expectRevert(
-      router.mintETH(borrowableWETH.address, lender, '0', {
+      router.mintETH(borrowableWETH.address, lender, "0", {
         value: ETH_LEND_AMOUNT,
         from: lender,
       }),
-      'ImpermaxRouter: EXPIRED'
+      "TarotRouter: EXPIRED"
     );
     op = router.mintETH(borrowableWETH.address, lender, DEADLINE, {
       value: ETH_LEND_AMOUNT,
@@ -266,7 +266,7 @@ contract('Router02', function (accounts) {
         LP_AMOUNT,
         borrower,
         DEADLINE,
-        '0x',
+        "0x",
         { from: borrower }
       )
     );
@@ -290,7 +290,7 @@ contract('Router02', function (accounts) {
     );
   });
 
-  it('redeem', async () => {
+  it("redeem", async () => {
     const UNI_REDEEM_AMOUNT = await borrowableUNI.balanceOf(lender);
     const ETH_REDEEM_AMOUNT = await borrowableWETH.balanceOf(lender);
     expect(UNI_REDEEM_AMOUNT * 1).to.be.gt(1);
@@ -302,11 +302,11 @@ contract('Router02', function (accounts) {
         borrowableUNI.address,
         UNI_REDEEM_AMOUNT,
         lender,
-        '0',
-        '0x',
+        "0",
+        "0x",
         { from: lender }
       ),
-      'ImpermaxRouter: EXPIRED'
+      "TarotRouter: EXPIRED"
     );
     await expectRevert(
       router.redeem(
@@ -314,10 +314,10 @@ contract('Router02', function (accounts) {
         UNI_REDEEM_AMOUNT,
         lender,
         DEADLINE,
-        '0x',
+        "0x",
         { from: lender }
       ),
-      'Impermax: TRANSFER_NOT_ALLOWED'
+      "Tarot: TRANSFER_NOT_ALLOWED"
     );
     const permitRedeemUNI = await permitGenerator.permit(
       borrowableUNI,
@@ -343,21 +343,21 @@ contract('Router02', function (accounts) {
         UNI_REDEEM_AMOUNT,
         lender,
         DEADLINE,
-        '0x',
+        "0x",
         { from: lender }
       ),
-      'ImpermaxRouter: NOT_WETH'
+      "TarotRouter: NOT_WETH"
     );
     await expectRevert(
       router.redeemETH(
         borrowableWETH.address,
         ETH_REDEEM_AMOUNT,
         lender,
-        '0',
-        '0x',
+        "0",
+        "0x",
         { from: lender }
       ),
-      'ImpermaxRouter: EXPIRED'
+      "TarotRouter: EXPIRED"
     );
     await expectRevert(
       router.redeemETH(
@@ -365,10 +365,10 @@ contract('Router02', function (accounts) {
         ETH_REDEEM_AMOUNT,
         lender,
         DEADLINE,
-        '0x',
+        "0x",
         { from: lender }
       ),
-      'Impermax: TRANSFER_NOT_ALLOWED'
+      "Tarot: TRANSFER_NOT_ALLOWED"
     );
     const permitRedeemETH = await permitGenerator.permit(
       borrowableWETH,
@@ -402,18 +402,18 @@ contract('Router02', function (accounts) {
     });
   });
 
-  it('borrow', async () => {
+  it("borrow", async () => {
     //Borrow UNI
     await expectRevert(
       router.borrow(
         borrowableUNI.address,
         UNI_BORROW_AMOUNT,
         borrower,
-        '0',
-        '0x',
+        "0",
+        "0x",
         { from: borrower }
       ),
-      'ImpermaxRouter: EXPIRED'
+      "TarotRouter: EXPIRED"
     );
     await expectRevert(
       router.borrow(
@@ -421,10 +421,10 @@ contract('Router02', function (accounts) {
         UNI_BORROW_AMOUNT,
         borrower,
         DEADLINE,
-        '0x',
+        "0x",
         { from: borrower }
       ),
-      'Impermax: BORROW_NOT_ALLOWED'
+      "Tarot: BORROW_NOT_ALLOWED"
     );
     const permitBorrowUNI = await permitGenerator.borrowPermit(
       borrowableUNI,
@@ -456,21 +456,21 @@ contract('Router02', function (accounts) {
         UNI_BORROW_AMOUNT,
         borrower,
         DEADLINE,
-        '0x',
+        "0x",
         { from: borrower }
       ),
-      'ImpermaxRouter: NOT_WETH'
+      "TarotRouter: NOT_WETH"
     );
     await expectRevert(
       router.borrowETH(
         borrowableWETH.address,
         ETH_BORROW_AMOUNT,
         borrower,
-        '0',
-        '0x',
+        "0",
+        "0x",
         { from: borrower }
       ),
-      'ImpermaxRouter: EXPIRED'
+      "TarotRouter: EXPIRED"
     );
     await expectRevert(
       router.borrowETH(
@@ -478,10 +478,10 @@ contract('Router02', function (accounts) {
         ETH_BORROW_AMOUNT,
         borrower,
         DEADLINE,
-        '0x',
+        "0x",
         { from: borrower }
       ),
-      'Impermax: BORROW_NOT_ALLOWED'
+      "Tarot: BORROW_NOT_ALLOWED"
     );
     const permitBorrowETH = await permitGenerator.borrowPermit(
       borrowableWETH,
@@ -507,13 +507,13 @@ contract('Router02', function (accounts) {
     );
   });
 
-  it('repay', async () => {
+  it("repay", async () => {
     //Repay UNI
     await expectRevert(
-      router.repay(borrowableUNI.address, UNI_REPAY_AMOUNT1, borrower, '0', {
+      router.repay(borrowableUNI.address, UNI_REPAY_AMOUNT1, borrower, "0", {
         from: borrower,
       }),
-      'ImpermaxRouter: EXPIRED'
+      "TarotRouter: EXPIRED"
     );
     await expectRevert.unspecified(
       router.repay(
@@ -558,14 +558,14 @@ contract('Router02', function (accounts) {
         value: ETH_REPAY_AMOUNT1,
         from: borrower,
       }),
-      'ImpermaxRouter: NOT_WETH'
+      "TarotRouter: NOT_WETH"
     );
     await expectRevert(
-      router.repayETH(borrowableWETH.address, borrower, '0', {
+      router.repayETH(borrowableWETH.address, borrower, "0", {
         value: ETH_REPAY_AMOUNT1,
         from: borrower,
       }),
-      'ImpermaxRouter: EXPIRED'
+      "TarotRouter: EXPIRED"
     );
     const actualRepayETH = await router.repayETH.call(
       borrowableWETH.address,
@@ -588,7 +588,7 @@ contract('Router02', function (accounts) {
     );
   });
 
-  it('repay exceeding borrowed', async () => {
+  it("repay exceeding borrowed", async () => {
     //Repay UNI
     await UNI.mint(borrower, UNI_REPAY_AMOUNT2);
     const borrowedUNI = await borrowableUNI.borrowBalance(borrower);
@@ -642,40 +642,40 @@ contract('Router02', function (accounts) {
     );
   });
 
-  it('leverage', async () => {
+  it("leverage", async () => {
     await expectRevert(
       leverage(
         router,
         uniswapV2Pair,
         borrower,
-        '100',
-        '8000',
-        '90',
-        '7000',
-        '0x',
-        '0x',
+        "100",
+        "8000",
+        "90",
+        "7000",
+        "0x",
+        "0x",
         ETH_IS_A
       ),
       ETH_IS_A
-        ? 'ImpermaxRouter: INSUFFICIENT_A_AMOUNT'
-        : 'ImpermaxRouter: INSUFFICIENT_B_AMOUNT'
+        ? "TarotRouter: INSUFFICIENT_A_AMOUNT"
+        : "TarotRouter: INSUFFICIENT_B_AMOUNT"
     );
     await expectRevert(
       leverage(
         router,
         uniswapV2Pair,
         borrower,
-        '80',
-        '10000',
-        '70',
-        '9000',
-        '0x',
-        '0x',
+        "80",
+        "10000",
+        "70",
+        "9000",
+        "0x",
+        "0x",
         ETH_IS_A
       ),
       ETH_IS_A
-        ? 'ImpermaxRouter: INSUFFICIENT_B_AMOUNT'
-        : 'ImpermaxRouter: INSUFFICIENT_A_AMOUNT'
+        ? "TarotRouter: INSUFFICIENT_B_AMOUNT"
+        : "TarotRouter: INSUFFICIENT_A_AMOUNT"
     );
     await expectRevert(
       leverage(
@@ -684,13 +684,13 @@ contract('Router02', function (accounts) {
         borrower,
         ETH_LEVERAGE_AMOUNT,
         UNI_LEVERAGE_AMOUNT,
-        '0',
-        '0',
-        '0x',
-        '0x',
+        "0",
+        "0",
+        "0x",
+        "0x",
         ETH_IS_A
       ),
-      'Impermax: BORROW_NOT_ALLOWED'
+      "Tarot: BORROW_NOT_ALLOWED"
     );
 
     const permitBorrowUNIHigh = await permitGenerator.borrowPermit(
@@ -714,13 +714,13 @@ contract('Router02', function (accounts) {
         borrower,
         ETH_LEVERAGE_AMOUNT_HIGH,
         UNI_LEVERAGE_AMOUNT_HIGH,
-        '0',
-        '0',
+        "0",
+        "0",
         permitBorrowETHHigh,
         permitBorrowUNIHigh,
         ETH_IS_A
       ),
-      'Impermax: INSUFFICIENT_LIQUIDITY'
+      "Tarot: INSUFFICIENT_LIQUIDITY"
     );
 
     const balancePrior = await collateral.balanceOf(borrower);
@@ -744,8 +744,8 @@ contract('Router02', function (accounts) {
       borrower,
       ETH_LEVERAGE_AMOUNT,
       UNI_LEVERAGE_AMOUNT,
-      '0',
-      '0',
+      "0",
+      "0",
       permitBorrowETH,
       permitBorrowUNI,
       ETH_IS_A
@@ -772,26 +772,26 @@ contract('Router02', function (accounts) {
     );
   });
 
-  it('liquidate', async () => {
+  it("liquidate", async () => {
     // Change oracle price
     await UNI.mint(uniswapV2Pair.address, UNI_BUY);
     await uniswapV2Pair.swap(
-      ETH_IS_A ? ETH_BOUGHT : '0',
-      ETH_IS_A ? '0' : ETH_BOUGHT,
+      ETH_IS_A ? ETH_BOUGHT : "0",
+      ETH_IS_A ? "0" : ETH_BOUGHT,
       address(0),
-      '0x'
+      "0x"
     );
-    await simpleUniswapOracle.getResult(uniswapV2Pair.address);
+    await tarotPriceOracle.getResult(uniswapV2Pair.address);
     await expectRevert(
       router.liquidate(
         borrowableUNI.address,
-        '0',
+        "0",
         borrower,
         liquidator,
         DEADLINE,
         { from: liquidator }
       ),
-      'Impermax: INSUFFICIENT_SHORTFALL'
+      "Tarot: INSUFFICIENT_SHORTFALL"
     );
     await increaseTime(3700);
     await borrowableUNI.accrueInterest();
@@ -803,10 +803,10 @@ contract('Router02', function (accounts) {
     const liquidatorBalance0 = await collateral.balanceOf(liquidator);
     await UNI.mint(liquidator, UNI_LIQUIDATE_AMOUNT);
     await expectRevert(
-      router.liquidate(borrowableUNI.address, '0', borrower, liquidator, '0', {
+      router.liquidate(borrowableUNI.address, "0", borrower, liquidator, "0", {
         from: liquidator,
       }),
-      'ImpermaxRouter: EXPIRED'
+      "TarotRouter: EXPIRED"
     );
     await expectRevert.unspecified(
       router.liquidate(
@@ -865,14 +865,14 @@ contract('Router02', function (accounts) {
         DEADLINE,
         { value: ETH_LIQUIDATE_AMOUNT, from: liquidator }
       ),
-      'ImpermaxRouter: NOT_WETH'
+      "TarotRouter: NOT_WETH"
     );
     await expectRevert(
-      router.liquidateETH(borrowableWETH.address, borrower, liquidator, '0', {
+      router.liquidateETH(borrowableWETH.address, borrower, liquidator, "0", {
         value: ETH_LIQUIDATE_AMOUNT,
         from: liquidator,
       }),
-      'ImpermaxRouter: EXPIRED'
+      "TarotRouter: EXPIRED"
     );
     const liquidateETHResult = await router.liquidateETH.call(
       borrowableWETH.address,
@@ -932,50 +932,50 @@ contract('Router02', function (accounts) {
     await checkETHBalance(op2, liquidator, expectedETHAmount, true);
   });
 
-  it('impermaxBorrow is forbidden to non-borrowable', async () => {
+  it("tarotBorrow is forbidden to non-borrowable", async () => {
     // Fails because data cannot be empty
     await expectRevert.unspecified(
-      router.impermaxBorrow(router.address, address(0), '0', '0x')
+      router.tarotBorrow(router.address, address(0), "0", "0x")
     );
     const data = encode(
-      ['uint8', 'address', 'uint8', 'bytes'],
-      [0, uniswapV2Pair.address, 0, '0x']
+      ["uint8", "address", "uint8", "bytes"],
+      [0, uniswapV2Pair.address, 0, "0x"]
     );
     // Fails becasue msg.sender is not a borrowable
     await expectRevert(
-      router.impermaxBorrow(router.address, address(0), '0', data),
-      'ImpermaxRouter: UNAUTHORIZED_CALLER'
+      router.tarotBorrow(router.address, address(0), "0", data),
+      "TarotRouter: UNAUTHORIZED_CALLER"
     );
     // Fails because sender is not the router
     const borrowableA = ETH_IS_A ? borrowableWETH : borrowableUNI;
     await expectRevert(
-      borrowableA.borrow(borrower, router.address, '0', data),
-      'ImpermaxRouter: SENDER_NOT_ROUTER'
+      borrowableA.borrow(borrower, router.address, "0", data),
+      "TarotRouter: SENDER_NOT_ROUTER"
     );
   });
 
-  it('impermaxRedeem is forbidden to non-collateral', async () => {
+  it("tarotRedeem is forbidden to non-collateral", async () => {
     // Fails because data cannot be empty
     await expectRevert.unspecified(
-      router.impermaxRedeem(router.address, '0', '0x')
+      router.tarotRedeem(router.address, "0", "0x")
     );
     const data = encode(
-      ['uint8', 'address', 'uint8', 'bytes'],
-      [0, uniswapV2Pair.address, 0, '0x']
+      ["uint8", "address", "uint8", "bytes"],
+      [0, uniswapV2Pair.address, 0, "0x"]
     );
     // Fails becasue msg.sender is not a borrowable
     await expectRevert(
-      router.impermaxRedeem(router.address, '0', data),
-      'ImpermaxRouter: UNAUTHORIZED_CALLER'
+      router.tarotRedeem(router.address, "0", data),
+      "TarotRouter: UNAUTHORIZED_CALLER"
     );
     // Fails because sender is not the router
     await expectRevert(
-      collateral.flashRedeem(router.address, '0', data),
-      'ImpermaxRouter: SENDER_NOT_ROUTER'
+      collateral.flashRedeem(router.address, "0", data),
+      "TarotRouter: SENDER_NOT_ROUTER"
     );
   });
 
-  it('address calculation', async () => {
+  it("address calculation", async () => {
     //console.log(keccak256(Collateral.bytecode));
     //console.log(keccak256(Borrowable.bytecode));
     //console.log(await router.getLendingPool(uniswapV2Pair.address));
@@ -986,10 +986,10 @@ contract('Router02', function (accounts) {
       ? borrowableUNI.address
       : borrowableWETH.address;
     const expectedCollateral = collateral.address;
-    expect(await router.getBorrowable(uniswapV2Pair.address, '0')).to.eq(
+    expect(await router.getBorrowable(uniswapV2Pair.address, "0")).to.eq(
       expectedBorrowableA
     );
-    expect(await router.getBorrowable(uniswapV2Pair.address, '1')).to.eq(
+    expect(await router.getBorrowable(uniswapV2Pair.address, "1")).to.eq(
       expectedBorrowableB
     );
     expect(await router.getCollateral(uniswapV2Pair.address)).to.eq(
@@ -1001,12 +1001,12 @@ contract('Router02', function (accounts) {
     expect(lendingPool.collateral).to.eq(expectedCollateral);
     const receipt = await router.getBorrowable.sendTransaction(
       uniswapV2Pair.address,
-      '0'
+      "0"
     );
     //console.log(receipt.receipt.gasUsed); // costs around 1800
   });
 
-  it('max approve', async () => {
+  it("max approve", async () => {
     //Redeem ETH
     await expectRevert(
       router.redeemETH(
@@ -1014,10 +1014,10 @@ contract('Router02', function (accounts) {
         MAX_APPROVE_ETH_AMOUNT,
         lender,
         DEADLINE,
-        '0x',
+        "0x",
         { from: lender }
       ),
-      'Impermax: TRANSFER_NOT_ALLOWED'
+      "Tarot: TRANSFER_NOT_ALLOWED"
     );
     expect((await borrowableWETH.allowance(lender, router.address)) * 1).to.eq(
       0
@@ -1042,7 +1042,7 @@ contract('Router02', function (accounts) {
     );
   });
 
-  it('router balance is always 0', async () => {
+  it("router balance is always 0", async () => {
     expect((await UNI.balanceOf(router.address)) * 1).to.eq(0);
     expect((await WETH.balanceOf(router.address)) * 1).to.eq(0);
     expect((await borrowableUNI.balanceOf(router.address)) * 1).to.eq(0);

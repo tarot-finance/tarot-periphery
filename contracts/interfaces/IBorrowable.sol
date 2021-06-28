@@ -2,7 +2,7 @@ pragma solidity >=0.5.0;
 
 interface IBorrowable {
 
-	/*** Impermax ERC20 ***/
+	/*** Tarot ERC20 ***/
 	
 	event Transfer(address indexed from, address indexed to, uint value);
 	event Approval(address indexed owner, address indexed spender, uint value);
