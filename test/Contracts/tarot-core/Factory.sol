@@ -155,8 +155,9 @@ contract Factory is IFactory {
             "Tarot: BORROWABLE1_NOT_CREATED"
         );
 
-        (, , , , , bool oracleInitialized) =
-            tarotPriceOracle.getPair(uniswapV2Pair);
+        (, , , , , bool oracleInitialized) = tarotPriceOracle.getPair(
+            uniswapV2Pair
+        );
         if (!oracleInitialized) tarotPriceOracle.initialize(uniswapV2Pair);
 
         ICollateral(lPool.collateral)._initialize(

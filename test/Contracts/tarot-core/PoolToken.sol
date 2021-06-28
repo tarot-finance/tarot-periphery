@@ -104,8 +104,9 @@ contract PoolToken is IPoolToken, TarotERC20 {
         bytes4(keccak256(bytes("transfer(address,uint256)")));
 
     function _safeTransfer(address to, uint256 amount) internal {
-        (bool success, bytes memory data) =
-            underlying.call(abi.encodeWithSelector(SELECTOR, to, amount));
+        (bool success, bytes memory data) = underlying.call(
+            abi.encodeWithSelector(SELECTOR, to, amount)
+        );
         require(
             success && (data.length == 0 || abi.decode(data, (bool))),
             "Tarot: TRANSFER_FAILED"

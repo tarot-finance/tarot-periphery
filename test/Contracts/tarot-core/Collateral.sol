@@ -21,23 +21,27 @@ contract Collateral is ICollateral, PoolToken, CStorage, CSetter {
 
     // returns the prices of borrowable0's and borrowable1's underlyings with collateral's underlying as denom
     function getPrices() public returns (uint256 price0, uint256 price1) {
-        (uint224 twapPrice112x112, ) =
-            ITarotPriceOracle(tarotPriceOracle).getResult(underlying);
-        (uint112 reserve0, uint112 reserve1, ) =
-            IUniswapV2Pair(underlying).getReserves();
-        uint256 collateralTotalSupply =
-            IUniswapV2Pair(underlying).totalSupply();
+        (uint224 twapPrice112x112, ) = ITarotPriceOracle(tarotPriceOracle)
+        .getResult(underlying);
+        (uint112 reserve0, uint112 reserve1, ) = IUniswapV2Pair(underlying)
+        .getReserves();
+        uint256 collateralTotalSupply = IUniswapV2Pair(underlying)
+        .totalSupply();
 
-        uint224 currentPrice112x112 =
-            UQ112x112.encode(reserve1).uqdiv(reserve0);
-        uint256 adjustmentSquared =
-            uint256(twapPrice112x112).mul(2**32).div(currentPrice112x112);
+        uint224 currentPrice112x112 = UQ112x112.encode(reserve1).uqdiv(
+            reserve0
+        );
+        uint256 adjustmentSquared = uint256(twapPrice112x112).mul(2**32).div(
+            currentPrice112x112
+        );
         uint256 adjustment = Math.sqrt(adjustmentSquared.mul(2**32));
 
-        uint256 currentBorrowable0Price =
-            uint256(collateralTotalSupply).mul(1e18).div(reserve0 * 2);
-        uint256 currentBorrowable1Price =
-            uint256(collateralTotalSupply).mul(1e18).div(reserve1 * 2);
+        uint256 currentBorrowable0Price = uint256(collateralTotalSupply)
+        .mul(1e18)
+        .div(reserve0 * 2);
+        uint256 currentBorrowable1Price = uint256(collateralTotalSupply)
+        .mul(1e18)
+        .div(reserve1 * 2);
 
         price0 = currentBorrowable0Price.mul(adjustment).div(2**32);
         price1 = currentBorrowable1Price.mul(2**32).div(adjustment);
@@ -92,8 +96,11 @@ contract Collateral is ICollateral, PoolToken, CStorage, CSetter {
         uint256 amountCollateral = finalBalance.mul(exchangeRate()).div(1e18);
         uint256 amount0 = IBorrowable(borrowable0).borrowBalance(from);
         uint256 amount1 = IBorrowable(borrowable1).borrowBalance(from);
-        (, uint256 shortfall) =
-            _calculateLiquidity(amountCollateral, amount0, amount1);
+        (, uint256 shortfall) = _calculateLiquidity(
+            amountCollateral,
+            amount0,
+            amount1
+        );
         return shortfall == 0;
     }
 
@@ -108,8 +115,9 @@ contract Collateral is ICollateral, PoolToken, CStorage, CSetter {
             amount0 = IBorrowable(borrowable0).borrowBalance(borrower);
         if (amount1 == uint256(-1))
             amount1 = IBorrowable(borrowable1).borrowBalance(borrower);
-        uint256 amountCollateral =
-            balanceOf[borrower].mul(exchangeRate()).div(1e18);
+        uint256 amountCollateral = balanceOf[borrower].mul(exchangeRate()).div(
+            1e18
+        );
         return _calculateLiquidity(amountCollateral, amount0, amount1);
     }
 
@@ -131,12 +139,17 @@ contract Collateral is ICollateral, PoolToken, CStorage, CSetter {
             borrowable == _borrowable0 || borrowable == _borrowable1,
             "Tarot: INVALID_BORROWABLE"
         );
-        uint256 amount0 =
-            borrowable == _borrowable0 ? accountBorrows : uint256(-1);
-        uint256 amount1 =
-            borrowable == _borrowable1 ? accountBorrows : uint256(-1);
-        (, uint256 shortfall) =
-            accountLiquidityAmounts(borrower, amount0, amount1);
+        uint256 amount0 = borrowable == _borrowable0
+            ? accountBorrows
+            : uint256(-1);
+        uint256 amount1 = borrowable == _borrowable1
+            ? accountBorrows
+            : uint256(-1);
+        (, uint256 shortfall) = accountLiquidityAmounts(
+            borrower,
+            amount0,
+            amount1
+        );
         return shortfall == 0;
     }
 
@@ -159,10 +172,10 @@ contract Collateral is ICollateral, PoolToken, CStorage, CSetter {
         else (, price) = getPrices();
 
         seizeTokens = repayAmount
-            .mul(liquidationIncentive)
-            .div(1e18)
-            .mul(price)
-            .div(exchangeRate());
+        .mul(liquidationIncentive)
+        .div(1e18)
+        .mul(price)
+        .div(exchangeRate());
 
         balanceOf[borrower] = balanceOf[borrower].sub(
             seizeTokens,
@@ -186,8 +199,10 @@ contract Collateral is ICollateral, PoolToken, CStorage, CSetter {
             ITarotCallee(redeemer).tarotRedeem(msg.sender, redeemAmount, data);
 
         uint256 redeemTokens = balanceOf[address(this)];
-        uint256 declaredRedeemTokens =
-            redeemAmount.mul(1e18).div(exchangeRate()).add(1); // rounded up
+        uint256 declaredRedeemTokens = redeemAmount
+        .mul(1e18)
+        .div(exchangeRate())
+        .add(1); // rounded up
         require(
             redeemTokens >= declaredRedeemTokens,
             "Tarot: INSUFFICIENT_REDEEM_TOKENS"

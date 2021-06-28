@@ -9,13 +9,18 @@ import "./interfaces/IBDeployer.sol";
  */
 
 contract BDeployer is IBDeployer {
-	constructor () public {}
-	
-	function deployBorrowable(address uniswapV2Pair, uint8 index) external returns (address borrowable) {
-		bytes memory bytecode = type(Borrowable).creationCode;
-		bytes32 salt = keccak256(abi.encodePacked(msg.sender, uniswapV2Pair, index));
-		assembly {
-			borrowable := create2(0, add(bytecode, 32), mload(bytecode), salt)
-		}
-	}
+    constructor() public {}
+
+    function deployBorrowable(address uniswapV2Pair, uint8 index)
+        external
+        returns (address borrowable)
+    {
+        bytes memory bytecode = type(Borrowable).creationCode;
+        bytes32 salt = keccak256(
+            abi.encodePacked(msg.sender, uniswapV2Pair, index)
+        );
+        assembly {
+            borrowable := create2(0, add(bytecode, 32), mload(bytecode), salt)
+        }
+    }
 }

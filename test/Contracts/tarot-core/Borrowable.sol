@@ -59,16 +59,15 @@ contract Borrowable is
     {
         uint256 _exchangeRateLast = exchangeRateLast;
         if (_exchangeRate > _exchangeRateLast) {
-            uint256 _exchangeRateNew =
-                _exchangeRate.sub(
-                    _exchangeRate.sub(_exchangeRateLast).mul(reserveFactor).div(
-                        1e18
-                    )
-                );
-            uint256 liquidity =
-                _totalSupply.mul(_exchangeRate).div(_exchangeRateNew).sub(
-                    _totalSupply
-                );
+            uint256 _exchangeRateNew = _exchangeRate.sub(
+                _exchangeRate.sub(_exchangeRateLast).mul(reserveFactor).div(
+                    1e18
+                )
+            );
+            uint256 liquidity = _totalSupply
+            .mul(_exchangeRate)
+            .div(_exchangeRateNew)
+            .sub(_totalSupply);
             if (liquidity == 0) return _exchangeRate;
             address reservesManager = IFactory(factory).reservesManager();
             _mint(reservesManager, liquidity);
@@ -151,8 +150,9 @@ contract Borrowable is
             } else {
                 borrowSnapshot.interestIndex = _borrowIndex;
             }
-            uint256 actualDecreaseAmount =
-                accountBorrowsPrior.sub(accountBorrows);
+            uint256 actualDecreaseAmount = accountBorrowsPrior.sub(
+                accountBorrows
+            );
             _totalBorrows = totalBorrows; // gas savings
             _totalBorrows = _totalBorrows > actualDecreaseAmount
                 ? _totalBorrows - actualDecreaseAmount
@@ -226,8 +226,10 @@ contract Borrowable is
         uint256 balance = IERC20(underlying).balanceOf(address(this));
         uint256 repayAmount = balance.sub(totalBalance);
 
-        uint256 actualRepayAmount =
-            Math.min(borrowBalance(borrower), repayAmount);
+        uint256 actualRepayAmount = Math.min(
+            borrowBalance(borrower),
+            repayAmount
+        );
         seizeTokens = ICollateral(collateral).seize(
             liquidator,
             borrower,

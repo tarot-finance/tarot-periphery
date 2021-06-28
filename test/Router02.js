@@ -18,8 +18,12 @@ const MAX_UINT_256 = new BN(2).pow(new BN(256)).sub(new BN(1));
 const DEADLINE = MAX_UINT_256;
 
 const MockERC20 = artifacts.require("MockERC20");
-const UniswapV2Factory = artifacts.require("UniswapV2Factory");
-const UniswapV2Pair = artifacts.require("UniswapV2Pair");
+const UniswapV2Factory = artifacts.require(
+  "test/Contracts/spooky/UniswapV2Factory.sol:UniswapV2Factory"
+);
+const UniswapV2Pair = artifacts.require(
+  "test/Contracts/uniswap-v2-core/UniswapV2Pair.sol:UniswapV2Pair"
+);
 const TarotPriceOracle = artifacts.require("TarotPriceOracle");
 const Factory = artifacts.require("Factory");
 const BDeployer = artifacts.require("BDeployer");
@@ -157,7 +161,7 @@ contract("Router02", function (accounts) {
       cDeployer.address,
       WETH.address
     );
-    await increaseTime(3700); // wait for oracle to be ready
+    await increaseTime(1300); // wait for oracle to be ready
     await permitGenerator.initialize();
   });
 

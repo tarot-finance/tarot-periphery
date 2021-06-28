@@ -19,8 +19,15 @@ const MAX_UINT_256 = new BN(2).pow(new BN(256)).sub(new BN(1));
 const DEADLINE = MAX_UINT_256;
 
 const MockERC20 = artifacts.require("MockERC20");
-const UniswapV2Factory = artifacts.require("UniswapV2Factory");
-const UniswapV2Pair = artifacts.require("UniswapV2Pair");
+const UniswapV2Factory = artifacts.require(
+  "test/Contracts/spooky/UniswapV2Factory.sol:UniswapV2Factory"
+);
+const UniswapV2Router02 = artifacts.require(
+  "test/Contracts/spooky/UniswapV2Router02.sol:UniswapV2Router02"
+);
+const UniswapV2Pair = artifacts.require(
+  "test/Contracts/uniswap-v2-core/UniswapV2Pair.sol:UniswapV2Pair"
+);
 const TarotPriceOracle = artifacts.require("TarotPriceOracle");
 const Factory = artifacts.require("Factory");
 const BDeployer = artifacts.require("BDeployer");
@@ -29,10 +36,11 @@ const Collateral = artifacts.require("Collateral");
 const Borrowable = artifacts.require("Borrowable");
 const Router02 = artifacts.require("Router02");
 const WETH9 = artifacts.require("WETH9");
-const StakingRewards = artifacts.require("StakingRewards");
-const StakingRewardsFactory = artifacts.require("StakingRewardsFactory");
-const StakedLPToken01 = artifacts.require("StakedLPToken01");
-const StakedLPTokenFactory01 = artifacts.require("StakedLPTokenFactory01");
+const MasterChef = artifacts.require(
+  "test/Contracts/spooky/MasterChef.sol:MasterChef"
+);
+const VaultToken = artifacts.require("VaultToken");
+const VaultTokenFactory = artifacts.require("VaultTokenFactory");
 
 const oneMantissa = new BN(10).pow(new BN(18));
 const UNI_LP_AMOUNT = oneMantissa;
@@ -56,7 +64,7 @@ let ETH_IS_A;
 const INITIAL_EXCHANGE_RATE = oneMantissa;
 const MINIMUM_LIQUIDITY = new BN(1000);
 
-contract("Deleverage02 Staked", function (accounts) {
+contract("Deleverage02 Vault", function (accounts) {
   let root = accounts[0];
   let borrower = accounts[1];
   let lender = accounts[2];
@@ -65,15 +73,15 @@ contract("Deleverage02 Staked", function (accounts) {
 
   let rewardsToken;
   let uniswapV2Factory;
-  let stakingRewardsFactory;
-  let stakedLPTokenFactory;
+  let uniswapV2Router02;
+  let masterChef;
+  let vaultTokenFactory;
   let tarotPriceOracle;
   let tarotFactory;
   let WETH;
   let UNI;
   let uniswapV2Pair;
-  let stakingRewards;
-  let stakedLPToken;
+  let vaultToken;
   let collateral;
   let borrowableWETH;
   let borrowableUNI;
@@ -83,10 +91,6 @@ contract("Deleverage02 Staked", function (accounts) {
     // Create base contracts
     rewardsToken = await MockERC20.new("", "");
     uniswapV2Factory = await UniswapV2Factory.new(address(0));
-    stakingRewardsFactory = await StakingRewardsFactory.new(
-      rewardsToken.address,
-      0
-    );
     tarotPriceOracle = await TarotPriceOracle.new();
     const bDeployer = await BDeployer.new();
     const cDeployer = await CDeployer.new();
@@ -98,15 +102,24 @@ contract("Deleverage02 Staked", function (accounts) {
       tarotPriceOracle.address
     );
     WETH = await WETH9.new();
+    uniswapV2Router02 = await UniswapV2Router02.new(
+      uniswapV2Factory.address,
+      WETH.address
+    );
     router = await Router02.new(
       tarotFactory.address,
       bDeployer.address,
       cDeployer.address,
       WETH.address
     );
-    stakedLPTokenFactory = await StakedLPTokenFactory01.new(
-      address(0),
-      address(0)
+
+    masterChef = await MasterChef.new(rewardsToken.address, address(0), 0, 0);
+
+    vaultTokenFactory = await VaultTokenFactory.new(
+      uniswapV2Router02.address,
+      masterChef.address,
+      rewardsToken.address,
+      998
     );
     // Create Uniswap Pair
     UNI = await MockERC20.new("Uniswap", "UNI");
@@ -125,42 +138,33 @@ contract("Deleverage02 Staked", function (accounts) {
     });
     await uniswapV2Pair.mint(borrower);
     LP_AMOUNT = await uniswapV2Pair.balanceOf(borrower);
-    // Create staking contract
-    await stakingRewardsFactory.deploy(uniswapV2PairAddress, 0, 0);
-    stakingRewardsAddress = (
-      await stakingRewardsFactory.stakingRewardsInfoByStakingToken(
-        uniswapV2PairAddress
-      )
-    ).stakingRewards;
-    stakingRewards = await StakingRewards.at(stakingRewardsAddress);
-    // Create staked LP token
-    const stakedLPTokenAddress =
-      await stakedLPTokenFactory.createStakedLPToken.call(
-        stakingRewardsAddress
-      );
-    await stakedLPTokenFactory.createStakedLPToken(stakingRewardsAddress);
-    stakedLPToken = await StakedLPToken01.at(stakedLPTokenAddress);
+    // Create pool
+    await masterChef.add(100, uniswapV2PairAddress);
+    // Create vaultToken
+    const vaultTokenAddress = await vaultTokenFactory.createVaultToken.call(0);
+    await vaultTokenFactory.createVaultToken(0);
+    vaultToken = await VaultToken.at(vaultTokenAddress);
     // Create Pair On Tarot
     collateralAddress = await tarotFactory.createCollateral.call(
-      stakedLPTokenAddress
+      vaultTokenAddress
     );
     borrowable0Address = await tarotFactory.createBorrowable0.call(
-      stakedLPTokenAddress
+      vaultTokenAddress
     );
     borrowable1Address = await tarotFactory.createBorrowable1.call(
-      stakedLPTokenAddress
+      vaultTokenAddress
     );
-    await tarotFactory.createCollateral(stakedLPTokenAddress);
-    await tarotFactory.createBorrowable0(stakedLPTokenAddress);
-    await tarotFactory.createBorrowable1(stakedLPTokenAddress);
-    await tarotFactory.initializeLendingPool(stakedLPTokenAddress);
+    await tarotFactory.createCollateral(vaultTokenAddress);
+    await tarotFactory.createBorrowable0(vaultTokenAddress);
+    await tarotFactory.createBorrowable1(vaultTokenAddress);
+    await tarotFactory.initializeLendingPool(vaultTokenAddress);
     collateral = await Collateral.at(collateralAddress);
     const borrowable0 = await Borrowable.at(borrowable0Address);
     const borrowable1 = await Borrowable.at(borrowable1Address);
     ETH_IS_A = (await borrowable0.underlying()) == WETH.address;
     if (ETH_IS_A) [borrowableWETH, borrowableUNI] = [borrowable0, borrowable1];
     else [borrowableWETH, borrowableUNI] = [borrowable1, borrowable0];
-    await increaseTime(3700); // wait for oracle to be ready
+    await increaseTime(1300); // wait for oracle to be ready
     await permitGenerator.initialize();
 
     //Mint UNI
@@ -218,7 +222,7 @@ contract("Deleverage02 Staked", function (accounts) {
     );
     await leverage(
       router,
-      stakedLPToken,
+      vaultToken,
       borrower,
       ETH_LEVERAGE_AMOUNT,
       UNI_LEVERAGE_AMOUNT,
@@ -243,7 +247,7 @@ contract("Deleverage02 Staked", function (accounts) {
     await expectRevert(
       deleverage(
         router,
-        stakedLPToken,
+        vaultToken,
         borrower,
         LP_DLVRG_TOKENS,
         ETH_DLVRG_MIN,
@@ -263,7 +267,7 @@ contract("Deleverage02 Staked", function (accounts) {
     await expectRevert(
       deleverage(
         router,
-        stakedLPToken,
+        vaultToken,
         borrower,
         "0",
         ETH_DLVRG_MIN,
@@ -276,7 +280,7 @@ contract("Deleverage02 Staked", function (accounts) {
     await expectRevert(
       deleverage(
         router,
-        stakedLPToken,
+        vaultToken,
         borrower,
         LP_DLVRG_TOKENS,
         ETH_DLVRG_HIGH,
@@ -291,7 +295,7 @@ contract("Deleverage02 Staked", function (accounts) {
     await expectRevert(
       deleverage(
         router,
-        stakedLPToken,
+        vaultToken,
         borrower,
         LP_DLVRG_TOKENS,
         ETH_DLVRG_MIN,
@@ -309,7 +313,7 @@ contract("Deleverage02 Staked", function (accounts) {
     const borrowBalanceETHPrior = await borrowableWETH.borrowBalance(borrower);
     const receipt = await deleverage(
       router,
-      stakedLPToken,
+      vaultToken,
       borrower,
       LP_DLVRG_TOKENS,
       ETH_DLVRG_MIN,
@@ -350,7 +354,7 @@ contract("Deleverage02 Staked", function (accounts) {
     const UNIBalancePrior = await UNI.balanceOf(borrower);
     const receipt = await deleverage(
       router,
-      stakedLPToken,
+      vaultToken,
       borrower,
       LP_DLVRG_TOKENS,
       "0",

@@ -13,3 +13,4 @@ test/CapitalFreeLiquidate.js
 typechain
 artifacts
 cache
+scripts
